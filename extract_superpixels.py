@@ -46,13 +46,19 @@ def process_image(params):
     n_sp_extracted = args.n_sp + 1  # number of actually extracted superpixels (can be different from requested in SLIC)
     n_sp_query = args.n_sp + (20 if args.dataset == 'mnist' else 50)  # number of superpixels we ask to extract (larger to extract more superpixels - closer to the desired n_sp)
     while n_sp_extracted > args.n_sp:
-        superpixels = slic(img, n_segments=n_sp_query, compactness=args.compactness, multichannel=len(img.shape) > 2)
+
+        ### Modify multichannel=len(img.shape) > 2 -> channel_axis = -1
+        channel_axis = -1 if len(img.shape) > 2 else None
+        superpixels = slic(img, n_segments=n_sp_query, compactness=args.compactness, start_label=1, channel_axis=channel_axis)
+        ###
+
         sp_indices = np.unique(superpixels)
         n_sp_extracted = len(sp_indices)
         n_sp_query -= 1  # reducing the number of superpixels until we get <= n superpixels
 
     assert n_sp_extracted <= args.n_sp and n_sp_extracted > 0, (args.split, index, n_sp_extracted, args.n_sp)
-    assert n_sp_extracted == np.max(superpixels) + 1, ('superpixel indices', np.unique(superpixels))  # make sure superpixel indices are numbers from 0 to n-1
+    ### Now return indices becomes [1,n], So move out n_sp_extracted == np.max(superpixels) + 1
+    assert n_sp_extracted == np.max(superpixels), ('superpixel indices', np.unique(superpixels))  # make sure superpixel indices are numbers from 0 to n-1
 
     if shuffle:
         ind = np.random.permutation(n_sp_extracted)
@@ -71,7 +77,8 @@ def process_image(params):
         avg_value = np.zeros(n_ch)
         for c in range(n_ch):
             avg_value[c] = np.mean(img[:, :, c][mask])
-        cntr = np.array(scipy.ndimage.measurements.center_of_mass(mask))  # row, col
+        ### Remove scipy.ndimage.measurements.center_of_mass
+        cntr = np.array(scipy.ndimage.center_of_mass(mask))  # row, col
         sp_intensity.append(avg_value)
         sp_coord.append(cntr)
     sp_intensity = np.array(sp_intensity, np.float32)
@@ -111,8 +118,8 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError('unsupported dataset: ' + args.dataset)
 
-    images = data.train_data if is_train else data.test_data
-    labels = data.train_labels if is_train else data.test_labels
+    images = data.train_data if is_train else data.test_data # torch.Size([60000, 28, 28])
+    labels = data.train_labels if is_train else data.test_labels # torch.Size([60000])
     if not isinstance(images, np.ndarray):
         images = images.numpy()
     if isinstance(labels, list):
